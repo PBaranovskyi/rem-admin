@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reminders</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #10141a);
+    --panel: var(--tg-theme-secondary-bg-color, #171d26);
+    --panel2: #1e2632;
+    --border: #2a3442;
+    --text: var(--tg-theme-text-color, #dbe4ef);
+    --muted: var(--tg-theme-hint-color, #7e8ea2);
+    --accent: var(--tg-theme-button-color, #4da3ff);
+    --ok: #3fbf7f; --warn: #e0a63a; --danger: #e06060;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.45 "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 14px 12px 90px; }
+  h1 { font-size: 18px; margin: 0 0 2px; }
+  .sub { color: var(--muted); margin-bottom: 12px; font-size: 12px; }
+  .banner { background: var(--panel); border: 1px solid var(--warn);
+            border-radius: 10px; padding: 10px 12px; margin-bottom: 12px;
+            font-size: 13px; }
+  .banner.err { border-color: var(--danger); color: var(--danger); }
+  .card { background: var(--panel); border: 1px solid var(--border);
+          border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+  .card.staged { border-color: var(--warn); }
+  .card.deleted { opacity: .45; border-style: dashed; }
+  .row1 { display: flex; align-items: center; gap: 8px; }
+  .rid { font-family: Consolas, monospace; color: var(--accent); font-size: 12px; }
+  .label { font-weight: 600; flex: 1; }
+  .meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .badge { display: inline-block; padding: 0 7px; border-radius: 999px;
+           font-size: 11px; font-weight: 600; border: 1px solid var(--border); }
+  .badge.type { color: var(--accent); }
+  .badge.life { color: var(--warn); }
+  .badge.work { color: var(--muted); }
+  .badge.stg  { color: var(--warn); border-color: var(--warn); }
+  .st-done { color: var(--ok); }
+  button { cursor: pointer; border: 1px solid var(--border); border-radius: 8px;
+           background: var(--panel2); color: var(--text); padding: 6px 12px;
+           font: inherit; font-size: 13px; }
+  button.danger { color: var(--danger); }
+  button.primary { background: var(--accent); border-color: var(--accent);
+                   color: #fff; font-weight: 600; }
+  .btns { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .tgl { position: relative; width: 42px; height: 24px; border-radius: 999px;
+         background: var(--border); border: none; padding: 0; flex: none; }
+  .tgl::after { content: ""; position: absolute; top: 2px; left: 2px;
+                width: 20px; height: 20px; border-radius: 50%; background: #94a3b8;
+                transition: .15s; }
+  .tgl.on { background: var(--ok); }
+  .tgl.on::after { left: 20px; background: #fff; }
+  textarea { width: 100%; min-height: 170px; background: rgba(0,0,0,.25);
+             color: var(--text); border: 1px solid var(--border); border-radius: 8px;
+             padding: 10px; font: 12px/1.5 Consolas, monospace; resize: vertical; }
+  .editerr { color: var(--danger); font-size: 12px; margin-top: 6px; white-space: pre-wrap; }
+  .panel { background: var(--panel); border: 1px solid var(--border);
+           border-radius: 12px; padding: 12px; margin-top: 14px; }
+  .panel h2 { font-size: 15px; margin: 0 0 10px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .tabs button.active { border-color: var(--accent); color: var(--accent); }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .grid label { color: var(--muted); font-size: 12px; margin-bottom: -4px; }
+  input, select { background: rgba(0,0,0,.25); color: var(--text);
+                  border: 1px solid var(--border); border-radius: 8px;
+                  padding: 8px 10px; font: inherit; width: 100%; }
+  .preview { margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .preview b { color: var(--ok); font-weight: 600; }
+  .preview.err b { color: var(--danger); }
+  .hint { color: var(--muted); font-size: 11px; margin-top: 6px; }
+  #toast { position: fixed; bottom: 76px; left: 50%; transform: translateX(-50%);
+           background: var(--panel2); border: 1px solid var(--border); padding: 8px 16px;
+           border-radius: 9px; opacity: 0; transition: .25s; pointer-events: none;
+           font-size: 13px; z-index: 9; max-width: 90%; }
+  #toast.show { opacity: 1; }
+  #toast.err { border-color: var(--danger); color: var(--danger); }
+  #savebar { position: fixed; bottom: 0; left: 0; right: 0; padding: 10px 12px;
+             background: var(--panel); border-top: 1px solid var(--border);
+             display: none; z-index: 8; }
+  #savebar button { width: 100%; padding: 11px; font-size: 15px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>⏰ Reminders</h1>
+  <div class="sub" id="sub">loading…</div>
+  <div id="banner" style="display:none"></div>
+  <div id="cards"></div>
+
+  <div class="panel">
+    <h2>New reminder</h2>
+    <div class="tabs">
+      <button id="tab-cron" class="active" onclick="setTab('cron')">Cron</button>
+      <button id="tab-json" onclick="setTab('json')">Raw JSON</button>
+    </div>
+    <div id="pane-cron">
+      <div class="grid">
+        <label>Cron (m h dom mon dow)</label>
+        <input id="c-expr" placeholder="*/30 9-19 * * 1-5" oninput="previewCron()">
+        <label>ID</label><input id="c-id" placeholder="my-reminder">
+        <label>Label</label><input id="c-label" placeholder="what is this about">
+        <label>Message</label><input id="c-msg" placeholder="🔔 Do the thing!">
+        <label>Bot</label>
+        <select id="c-bot"><option value="work">work (@pavlo_work_bot)</option>
+          <option value="life">life (@Pavlo_life_bot)</option></select>
+      </div>
+      <div id="c-preview" class="preview">Next fires: —</div>
+      <div class="btns"><button class="primary" onclick="stageCron()">Add to draft</button></div>
+      <div class="hint"><code>0 9 * * 1-5</code> = weekdays 09:00 ·
+        <code>0 10 1 * *</code> = 1st of month 10:00 · Sun=0/7</div>
+    </div>
+    <div id="pane-json" style="display:none">
+      <textarea id="j-body" spellcheck="false">{
+  "id": "my-reminder",
+  "label": "what is this about",
+  "message": "🔔 Do the thing — {countdown}",
+  "bot": "life",
+  "type": "deadline",
+  "deadline": "2026-08-01",
+  "active_hours": [9, 21],
+  "cadence": [
+    { "days_left": 99, "every": "1d" },
+    { "days_left": 2, "every": "3h" }
+  ],
+  "enabled": true
+}</textarea>
+      <div class="btns"><button class="primary" onclick="stageJson()">Add to draft</button></div>
+      <div class="hint">Types: deadline · window · daily · monthly · cron.</div>
+    </div>
+  </div>
+</div>
+<div id="savebar"><button class="primary" id="savebtn" onclick="saveAll()">Save</button></div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const tg = window.Telegram && window.Telegram.WebApp;
+const inTg = !!(tg && tg.initData);
+if (tg) { tg.ready(); tg.expand(); }
+
+let DATA = { reminders: [], state: {}, generated: "" };
+let OPS = [];            // staged operations, compacted per id
+let openEditor = null;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function toast(msg, isErr = false) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.className = "show" + (isErr ? " err" : "");
+  setTimeout(() => t.className = "", 2800);
+}
+function banner(msg, isErr = false) {
+  const b = $("banner");
+  b.style.display = "";
+  b.className = "banner" + (isErr ? " err" : "");
+  b.textContent = msg;
+}
+
+/* ---------- snapshot loading (AES-256-GCM, key from #k=) ---------- */
+function keyFromHash() {
+  const m = location.hash.match(/[#&]k=([A-Za-z0-9_\-=]+)/);
+  if (!m) return null;
+  const b64 = m[1].replace(/-/g, "+").replace(/_/g, "/");
+  const bin = atob(b64);
+  const raw = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) raw[i] = bin.charCodeAt(i);
+  return raw;
+}
+
+async function loadSnapshot() {
+  const raw = keyFromHash();
+  if (!raw) { banner("No decryption key in the link — reopen the app from the bot button (/app).", true); return; }
+  let blob;
+  try {
+    const res = await fetch("snapshot.enc?ts=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    blob = (await res.text()).trim();
+  } catch (e) { banner("Cannot fetch data snapshot: " + e.message, true); return; }
+  try {
+    const buf = Uint8Array.from(atob(blob), c => c.charCodeAt(0));
+    const key = await crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["decrypt"]);
+    const plain = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: buf.slice(0, 12) }, key, buf.slice(12));
+    DATA = JSON.parse(new TextDecoder().decode(plain));
+  } catch (e) { banner("Cannot decrypt snapshot — the link key is stale. Send /app to the bot for a fresh button.", true); return; }
+  $("sub").textContent = "snapshot: " + (DATA.generated || "?") +
+    " · changes are applied by the bot after Save";
+  if (!inTg) banner("Opened outside Telegram — read-only (saving needs the bot button).");
+  render();
+}
+
+/* ---------- staged ops ---------- */
+function dropOps(id) { OPS = OPS.filter(o => (o.r ? o.r.id : o.id) !== id); }
+function opFor(id) { return OPS.find(o => (o.r ? o.r.id : o.id) === id); }
+
+function effReminders() {
+  // current view = snapshot + staged ops
+  let out = DATA.reminders.map(r => ({ ...r }));
+  for (const op of OPS) {
+    if (op.a === "create") out.push({ ...op.r, __staged: "new" });
+    else if (op.a === "update") {
+      const i = out.findIndex(x => x.id === op.id);
+      if (i >= 0) out[i] = { ...op.r, __staged: "edited" };
+    } else if (op.a === "delete") {
+      const i = out.findIndex(x => x.id === op.id);
+      if (i >= 0) out[i] = { ...out[i], __staged: "deleted" };
+    } else if (op.a === "toggle") {
+      const i = out.findIndex(x => x.id === op.id);
+      if (i >= 0) out[i] = { ...out[i], enabled: op.enabled, __staged: "toggled" };
+    }
+  }
+  return out;
+}
+
+function stage(op) {
+  // compact ops per id so the batch stays small and idempotent
+  const id = op.r ? op.r.id : op.id;
+  const prev = opFor(id);
+  if (op.a === "toggle") {
+    if (!prev) OPS.push(op);
+    else if (prev.a === "toggle") dropOps(id);          // flip back = no change
+    else if (prev.a === "create" || prev.a === "update") prev.r.enabled = op.enabled;
+    // prev delete: ignored (UI blocks toggling a deleted card)
+  } else if (op.a === "create") {
+    dropOps(id);
+    if (prev && prev.a === "delete") OPS.push({ a: "update", id, r: op.r });
+    else OPS.push(op);
+  } else if (op.a === "update") {
+    dropOps(id);
+    if (prev && prev.a === "create") OPS.push({ a: "create", r: op.r });
+    else OPS.push(op);
+  } else if (op.a === "delete") {
+    dropOps(id);
+    if (!(prev && prev.a === "create")) OPS.push(op);   // staged-new delete = gone
+  }
+  refreshSaveUi();
+  render();
+}
+
+function unstage(id) { dropOps(id); refreshSaveUi(); render(); }
+
+function payload() { return JSON.stringify({ v: 1, ops: OPS.map(({__staged, ...o}) => o) }); }
+
+function refreshSaveUi() {
+  const n = OPS.length;
+  const label = n ? `Save (${n})` : "Save";
+  if (inTg) {
+    if (n) { tg.MainButton.setText(label); tg.MainButton.show(); }
+    else tg.MainButton.hide();
+  } else {
+    $("savebar").style.display = n ? "" : "none";
+    $("savebtn").textContent = label;
+  }
+}
+
+function saveAll() {
+  if (!OPS.length) return;
+  const body = payload();
+  const bytes = new TextEncoder().encode(body).length;
+  if (bytes > 4000) {
+    toast(`Draft too big for Telegram (${bytes} > 4000 bytes) — save fewer changes at once`, true);
+    return;
+  }
+  if (!inTg) { toast("Open from the bot button to save", true); return; }
+  tg.sendData(body);   // Telegram closes the app after sendData
+}
+if (inTg) tg.MainButton.onClick(saveAll);
+
+/* ---------- rendering ---------- */
+function schedText(r) {
+  if (r.type === "deadline") return "until " + r.deadline;
+  if (r.type === "cron")     return "cron: " + r.cron;
+  if (r.type === "daily")    return "every " + r.every +
+    (r.active_hours ? " @ " + r.active_hours.join("–") + "h" : "");
+  if (r.type === "window") {
+    const wd = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][r.window.weekday];
+    return `${wd} ${r.window.start_hour}:00 +${r.window.duration_hours || 1}h`;
+  }
+  if (r.type === "monthly") return `days ${r.day_start}–${r.day_deadline}`;
+  return "";
+}
+
+function statusText(r) {
+  const st = DATA.state[r.id] || {};
+  const parts = [];
+  if (st.finished) parts.push('<span class="st-done">finished</span>');
+  if (st.done_day) parts.push('<span class="st-done">done ' + esc(st.done_day) + "</span>");
+  if (st.done_month) parts.push('<span class="st-done">done ' + esc(st.done_month) + "</span>");
+  if (st.done_window) parts.push('<span class="st-done">done wk ' + esc(st.done_window) + "</span>");
+  if (st.last_sent) {
+    const d = new Date(st.last_sent * 1000);
+    parts.push("sent " + d.toLocaleString("en-GB",
+      { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }));
+  }
+  return parts.join(" · ") || "—";
+}
+
+function render() {
+  const box = $("cards");
+  box.innerHTML = "";
+  const rems = effReminders();
+  if (!rems.length) {
+    box.innerHTML = '<div class="card" style="color:var(--muted)">No reminders yet.</div>';
+    return;
+  }
+  for (const r of rems) {
+    const card = document.createElement("div");
+    card.className = "card" + (r.__staged ? " staged" : "") +
+                     (r.__staged === "deleted" ? " deleted" : "");
+    const stgBadge = r.__staged ? ` <span class="badge stg">${esc(r.__staged)}</span>` : "";
+    card.innerHTML =
+      `<div class="row1">
+         <div class="label">${esc(r.label)}</div>
+         <button class="tgl ${r.enabled !== false ? "on" : ""}"></button>
+       </div>
+       <div class="meta"><span class="rid">${esc(r.id)}</span> ·
+         <span class="badge type">${esc(r.type)}</span>
+         <span class="badge ${r.bot === "life" ? "life" : "work"}">${esc(r.bot || "work")}</span>${stgBadge}<br>
+         ${esc(schedText(r))} · ${statusText(r)}</div>
+       <div class="btns">
+         <button class="edit">Edit</button>
+         <button class="danger del">${r.__staged === "deleted" ? "Undo delete" : "Delete"}</button>
+         ${r.__staged ? '<button class="undo">Discard change</button>' : ""}
+       </div>`;
+    card.querySelector(".tgl").onclick = () => {
+      if (r.__staged === "deleted") { toast("Undo the delete first", true); return; }
+      stage({ a: "toggle", id: r.id, enabled: !(r.enabled !== false) });
+    };
+    card.querySelector(".edit").onclick = () => {
+      if (r.__staged === "deleted") { toast("Undo the delete first", true); return; }
+      editCard(r.id);
+    };
+    card.querySelector(".del").onclick = () => {
+      if (r.__staged === "deleted") { unstage(r.id); return; }
+      if (confirm(`Delete "${r.label}" (${r.id})?`)) stage({ a: "delete", id: r.id });
+    };
+    const undo = card.querySelector(".undo");
+    if (undo) undo.onclick = () => unstage(r.id);
+    box.appendChild(card);
+    if (openEditor === r.id) box.appendChild(editorCard(r));
+  }
+}
+
+function editorCard(r) {
+  const div = document.createElement("div");
+  div.className = "card";
+  const { __staged, ...clean } = r;
+  div.innerHTML = `<textarea spellcheck="false">${esc(JSON.stringify(clean, null, 2))}</textarea>
+    <div class="editerr"></div>
+    <div class="btns">
+      <button class="primary save">Stage edit</button>
+      <button class="cancel">Cancel</button>
+    </div>`;
+  div.querySelector(".cancel").onclick = () => { openEditor = null; render(); };
+  div.querySelector(".save").onclick = () => {
+    const errBox = div.querySelector(".editerr");
+    let obj;
+    try { obj = JSON.parse(div.querySelector("textarea").value); }
+    catch (e) { errBox.textContent = "Invalid JSON: " + e.message; return; }
+    const errs = quickValidate(obj);
+    if (errs.length) { errBox.textContent = errs.join("\n"); return; }
+    openEditor = null;
+    stage({ a: "update", id: r.id, r: obj });
+    toast("Staged: " + obj.id);
+  };
+  return div;
+}
+
+function editCard(id) { openEditor = (openEditor === id ? null : id); render(); }
+
+/* ---------- new reminder ---------- */
+function setTab(t) {
+  $("tab-cron").classList.toggle("active", t === "cron");
+  $("tab-json").classList.toggle("active", t === "json");
+  $("pane-cron").style.display = t === "cron" ? "" : "none";
+  $("pane-json").style.display = t === "json" ? "" : "none";
+}
+
+function quickValidate(r) {
+  // light client-side check; the bot re-validates with the full schema
+  const errs = [];
+  if (!r || typeof r !== "object") return ["reminder must be an object"];
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(r.id || "")) errs.push("id: [A-Za-z0-9_-], max 64");
+  if (!r.label || !String(r.label).trim()) errs.push("label: required");
+  if (!r.message || !String(r.message).trim()) errs.push("message: required");
+  if (!["deadline","window","daily","monthly","cron"].includes(r.type))
+    errs.push("type: deadline|window|daily|monthly|cron");
+  if (r.bot && !["work","life"].includes(r.bot)) errs.push("bot: work|life");
+  return errs;
+}
+
+function stageCron() {
+  const r = {
+    id: $("c-id").value.trim(),
+    label: $("c-label").value.trim(),
+    message: $("c-msg").value.trim(),
+    bot: $("c-bot").value,
+    type: "cron",
+    cron: $("c-expr").value.trim(),
+    enabled: true,
+  };
+  const errs = quickValidate(r);
+  if (!r.cron) errs.push("cron: required");
+  if (errs.length) { toast(errs.join("; "), true); return; }
+  if (effReminders().some(x => x.id === r.id && x.__staged !== "deleted")) {
+    toast(`id '${r.id}' already exists`, true); return;
+  }
+  stage({ a: "create", r });
+  ["c-id","c-label","c-msg","c-expr"].forEach(id => $(id).value = "");
+  previewCron();
+  toast("Staged: " + r.id);
+}
+
+function stageJson() {
+  let obj;
+  try { obj = JSON.parse($("j-body").value); }
+  catch (e) { toast("Invalid JSON: " + e.message, true); return; }
+  const errs = quickValidate(obj);
+  if (errs.length) { toast(errs.join("; "), true); return; }
+  if (effReminders().some(x => x.id === obj.id && x.__staged !== "deleted")) {
+    toast(`id '${obj.id}' already exists`, true); return;
+  }
+  stage({ a: "create", r: obj });
+  toast("Staged: " + obj.id);
+}
+
+/* ---------- client-side cron preview (mirrors reminder_daemon) ---------- */
+function cronField(spec, lo, hi) {
+  const out = new Set();
+  for (let part of String(spec).split(",")) {
+    part = part.trim();
+    let step = 1;
+    if (part.includes("/")) {
+      const [p, s] = part.split("/");
+      part = p; step = parseInt(s, 10);
+      if (!(step >= 1)) throw new Error("bad step");
+    }
+    let a, b;
+    if (part === "*" || part === "") { a = lo; b = hi; }
+    else if (part.includes("-")) { const [x, y] = part.split("-"); a = +x; b = +y; }
+    else { a = b = +part; }
+    if (!(lo <= a && a <= hi && lo <= b && b <= hi && a <= b)) throw new Error("out of range");
+    for (let v = a; v <= b; v += step) out.add(v);
+  }
+  return out;
+}
+function cronNextFires(expr, count = 3) {
+  const f = String(expr).trim().split(/\s+/);
+  if (f.length !== 5) throw new Error("needs 5 fields");
+  const c = {
+    m: cronField(f[0], 0, 59), h: cronField(f[1], 0, 23),
+    dom: cronField(f[2], 1, 31), mon: cronField(f[3], 1, 12),
+    dow: new Set([...cronField(f[4], 0, 7)].map(d => d % 7)),
+    domStar: f[2].split("/")[0] === "*", dowStar: f[4].split("/")[0] === "*",
+  };
+  const out = [];
+  const d = new Date(); d.setSeconds(0, 0); d.setMinutes(d.getMinutes() + 1);
+  const end = Date.now() + 370 * 86400e3;
+  while (d.getTime() <= end && out.length < count) {
+    const ok = c.m.has(d.getMinutes()) && c.h.has(d.getHours()) &&
+               c.mon.has(d.getMonth() + 1) &&
+               (c.domStar && c.dowStar ? true :
+                c.domStar ? c.dow.has(d.getDay()) :
+                c.dowStar ? c.dom.has(d.getDate()) :
+                (c.dom.has(d.getDate()) || c.dow.has(d.getDay())));
+    if (ok) out.push(new Date(d));
+    d.setMinutes(d.getMinutes() + 1);
+  }
+  return out;
+}
+let previewTimer = null;
+function previewCron() {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(() => {
+    const expr = $("c-expr").value.trim();
+    const box = $("c-preview");
+    if (!expr) { box.className = "preview"; box.textContent = "Next fires: —"; return; }
+    try {
+      const fires = cronNextFires(expr, 3).map(d => d.toLocaleString("en-GB",
+        { weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }));
+      box.className = "preview";
+      box.innerHTML = "Next fires: <b>" + fires.map(esc).join("</b> · <b>") + "</b>";
+    } catch (e) {
+      box.className = "preview err";
+      box.innerHTML = "Next fires: <b>" + esc(e.message) + "</b>";
+    }
+  }, 300);
+}
+
+loadSnapshot();
+refreshSaveUi();
+</script>
+</body>
+</html>
