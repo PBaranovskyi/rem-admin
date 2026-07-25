@@ -140,7 +140,17 @@
 <script>
 "use strict";
 const tg = window.Telegram && window.Telegram.WebApp;
-const inTg = !!(tg && tg.initData);
+// Do NOT gate on tg.initData: an app opened from a REPLY-KEYBOARD web_app
+// button (which is the only launch kind that can sendData back) gets an EMPTY
+// initData, so that check reported "not in Telegram" and the Save MainButton
+// never appeared. Detect the real capability instead — same test proc-admin
+// uses (procadmin.py inTG()): a known platform + a callable sendData.
+const inTg = (function () {
+  try {
+    return !!(tg && tg.platform && tg.platform !== "unknown"
+              && typeof tg.sendData === "function");
+  } catch (e) { return false; }
+})();
 if (tg) { tg.ready(); tg.expand(); }
 
 let DATA = { reminders: [], state: {}, generated: "" };
@@ -256,8 +266,16 @@ function refreshSaveUi() {
     if (n) { tg.MainButton.setText(label); tg.MainButton.show(); }
     else tg.MainButton.hide();
   } else {
-    $("savebar").style.display = n ? "" : "none";
-    $("savebtn").textContent = label;
+    // "block", not "": an empty value falls back to the stylesheet, where
+    // #savebar is display:none — so the bar could never actually appear.
+    // Outside Telegram saving is impossible (sendData is the only write path),
+    // so the bar reports the staged count but the button stays disabled and
+    // says where to go — better than a button that always refuses on click.
+    $("savebar").style.display = n ? "block" : "none";
+    $("savebtn").disabled = true;
+    $("savebtn").textContent = n
+      ? `${n} staged — open from /app in Telegram to save`
+      : label;
   }
 }
 
