@@ -340,7 +340,12 @@ function render() {
     };
     card.querySelector(".del").onclick = () => {
       if (r.__staged === "deleted") { unstage(r.id); return; }
-      if (confirm(`Delete "${r.label}" (${r.id})?`)) stage({ a: "delete", id: r.id });
+      const q = `Delete "${r.label}" (${r.id})?`;
+      const done = ok => { if (ok) stage({ a: "delete", id: r.id }); };
+      // Telegram Mini App clients block native confirm() (returns false) —
+      // use tg.showConfirm there; keep native confirm() as browser fallback.
+      if (inTg && tg.showConfirm) tg.showConfirm(q, done);
+      else done(confirm(q));
     };
     const undo = card.querySelector(".undo");
     if (undo) undo.onclick = () => unstage(r.id);
