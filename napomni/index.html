@@ -348,7 +348,7 @@ function render() {
        </div>
        <div class="meta"><span class="rid">${esc(r.id)}</span> ·
          <span class="badge type">${esc(r.type)}</span>
-         ${DATA.single_bot ? "" : `<span class="badge ${r.bot === "life" ? "life" : "work"}">${esc(r.bot || "work")}</span>`}${stgBadge}<br>
+         ${DATA.single_bot ? "" : `<span class="badge ${r.bot === "life" ? "life" : "work"}">${esc(r.bot || "work")}</span>`}${r.created_by ? ` <span class="badge">✍️ ${esc(r.created_by)}</span>` : ""}${stgBadge}<br>
          ${esc(schedText(r))} · ${statusText(r)}</div>
        <div class="btns">
          <button class="edit">Edit</button>
