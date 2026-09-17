@@ -105,8 +105,8 @@
         <label>ID</label><input id="c-id" placeholder="my-reminder">
         <label>Label</label><input id="c-label" placeholder="what is this about">
         <label>Message</label><input id="c-msg" placeholder="🔔 Do the thing!">
-        <label>Bot</label>
-        <select id="c-bot"><option value="work">work (@pavlo_work_bot)</option>
+        <label class="bot-ui">Bot</label>
+        <select id="c-bot" class="bot-ui"><option value="work">work (@pavlo_work_bot)</option>
           <option value="life">life (@Pavlo_life_bot)</option></select>
       </div>
       <div id="c-preview" class="preview">Next fires: —</div>
@@ -201,6 +201,11 @@ async function loadSnapshot() {
       { name: "AES-GCM", iv: buf.slice(0, 12) }, key, buf.slice(12));
     DATA = JSON.parse(new TextDecoder().decode(plain));
   } catch (e) { banner("Cannot decrypt snapshot — the link key is stale. Send /app to the bot for a fresh button.", true); return; }
+  // Single-bot instance (e.g. Napomni): one dedicated bot, no work/life picker.
+  if (DATA.single_bot) {
+    document.querySelectorAll(".bot-ui").forEach(el => el.style.display = "none");
+    if (DATA.title) document.querySelector("h1").textContent = "⏰ " + DATA.title;
+  }
   $("sub").textContent = "snapshot: " + (DATA.generated || "?") +
     " · changes are applied by the bot after Save";
   if (!inTg) banner("Opened outside Telegram — read-only (saving needs the bot button).");
@@ -231,6 +236,8 @@ function effReminders() {
 }
 
 function stage(op) {
+  // single-bot instance: the "bot" field is meaningless there — never send it
+  if (DATA.single_bot && op.r) delete op.r.bot;
   // compact ops per id so the batch stays small and idempotent
   const id = op.r ? op.r.id : op.id;
   const prev = opFor(id);
@@ -341,7 +348,7 @@ function render() {
        </div>
        <div class="meta"><span class="rid">${esc(r.id)}</span> ·
          <span class="badge type">${esc(r.type)}</span>
-         <span class="badge ${r.bot === "life" ? "life" : "work"}">${esc(r.bot || "work")}</span>${stgBadge}<br>
+         ${DATA.single_bot ? "" : `<span class="badge ${r.bot === "life" ? "life" : "work"}">${esc(r.bot || "work")}</span>`}${r.created_by ? ` <span class="badge">✍️ ${esc(r.created_by)}</span>` : ""}${stgBadge}<br>
          ${esc(schedText(r))} · ${statusText(r)}</div>
        <div class="btns">
          <button class="edit">Edit</button>
