@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>oracle apps</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  body { margin: 0; background: #0f1216; color: #d7dde4;
+         font: 15px/1.5 "Segoe UI", system-ui, sans-serif; }
+  #msg { padding: 40px 20px; text-align: center; color: #8b96a3; }
+  #msg.err { color: #ff6b6b; }
+</style>
+</head>
+<body>
+<div id="msg">Loading…</div>
+<script>
+/* Viewer: snapshot.enc is the FULL rendered app page (oracle-apps)
+   rendered on pavlo-a1, AES-256-GCM encrypted. The key never
+   touches the server — it arrives only in the URL fragment (#k=...) of the
+   web_app button the bot sends. Decrypt client-side, replace the document. */
+function fail(t) { const m = document.getElementById("msg");
+                   m.className = "err"; m.textContent = t; }
+
+function keyFromHash() {
+  const m = location.hash.match(/[#&]k=([A-Za-z0-9_\-=]+)/);
+  if (!m) return null;
+  const b64 = m[1].replace(/-/g, "+").replace(/_/g, "/");
+  const bin = atob(b64);
+  const raw = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) raw[i] = bin.charCodeAt(i);
+  return raw;
+}
+
+async function load() {
+  try { window.Telegram && Telegram.WebApp && Telegram.WebApp.expand(); } catch (e) {}
+  const raw = keyFromHash();
+  if (!raw) { fail("No decryption key in the link — reopen from the bot button (/procs or /todo)."); return; }
+  let blob;
+  try {
+    const res = await fetch("snapshot.enc?ts=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    blob = (await res.text()).trim();
+  } catch (e) { fail("Cannot fetch snapshot: " + e.message); return; }
+  let html;
+  try {
+    const buf = Uint8Array.from(atob(blob), c => c.charCodeAt(0));
+    const key = await crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["decrypt"]);
+    const plain = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: buf.slice(0, 12) }, key, buf.slice(12));
+    html = new TextDecoder().decode(plain);
+  } catch (e) { fail("Cannot decrypt — the link key is stale. Send /procs or /todo to the bot for a fresh button."); return; }
+  document.open(); document.write(html); document.close();
+}
+load();
+</script>
+</body>
+</html>
